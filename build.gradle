@@ -1,0 +1,9 @@
+apply plugin: 'java'
+
+sourceSets {
+    main.java.srcDirs += 'okio/src/main/java'
+}
+
+dependencies {
+    compile fileTree(dir: 'libs', include: ['*.jar'])
+}
