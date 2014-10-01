@@ -4,7 +4,11 @@ Okio -- VicV Flavor
 Okio is a new library that complements `java.io` and `java.nio` to make it much
 easier to access, store, and process your data.
 
-@VicV flavor: Essentially you can copy these sources into eclipse/android studio and there shouldn't be any errors. For android dev. 
+#####VicV flavor
+
+Basically ripped everything out to add this as a submodule in android studio, but not as a module.
+
+Why? So I can make an android LIBRARY project that contains this instead of requiring transitive dependencies.
 
 ByteStrings and Buffers
 -----------------------
