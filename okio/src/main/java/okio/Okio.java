@@ -23,9 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.OpenOption;
-import java.nio.file.Path;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -175,12 +172,12 @@ public final class Okio {
 		return source(new FileInputStream(file));
 	}
 
-	/** Returns a source that reads from {@code path}. */
-	public static Source source(Path path, OpenOption... options) throws IOException {
-		if (path == null)
-			throw new IllegalArgumentException("path == null");
-		return source(Files.newInputStream(path, options));
-	}
+//	/** Returns a source that reads from {@code path}. */
+//	public static Source source(Path path, OpenOption... options) throws IOException {
+//		if (path == null)
+//			throw new IllegalArgumentException("path == null");
+//		return source(Files.newInputStream(path, options));
+//	}
 
 	/** Returns a sink that writes to {@code file}. */
 	public static Sink sink(File file) throws FileNotFoundException {
@@ -196,12 +193,12 @@ public final class Okio {
 		return sink(new FileOutputStream(file, true));
 	}
 
-	/** Returns a sink that writes to {@code path}. */
-	public static Sink sink(Path path, OpenOption... options) throws IOException {
-		if (path == null)
-			throw new IllegalArgumentException("path == null");
-		return sink(Files.newOutputStream(path, options));
-	}
+//	/** Returns a sink that writes to {@code path}. */
+//	public static Sink sink(Path path, OpenOption... options) throws IOException {
+//		if (path == null)
+//			throw new IllegalArgumentException("path == null");
+//		return sink(Files.newOutputStream(path, options));
+//	}
 
 	/**
 	 * Returns a source that reads from {@code socket}. Prefer this over {@link #source(InputStream)} because this method honors timeouts.
