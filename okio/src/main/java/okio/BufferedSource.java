@@ -70,6 +70,24 @@ public interface BufferedSource extends Source {
   long readLongLe() throws IOException;
 
   /**
+   * Reads a long from this source in signed decimal form (i.e., as a string in base 10 with
+   * optional leading '-'). This will iterate until a non-digit character is found.
+   *
+   * @throws NumberFormatException if the found digits do not fit into a {@code long} or a decimal
+   * number was not present.
+   */
+  long readDecimalLong() throws IOException;
+
+  /**
+   * Reads a long form this source in hexadecimal form (i.e., as a string in base 16). This will
+   * iterate until a non-hexadecimal character is found.
+   *
+   * @throws NumberFormatException if the found hexadecimal does not fit into a {@code long} or
+   * hexadecimal was not found.
+   */
+  long readHexadecimalUnsignedLong() throws IOException;
+
+  /**
    * Reads and discards {@code byteCount} bytes from this source. Throws an
    * {@link java.io.EOFException} if the source is exhausted before the
    * requested bytes can be skipped.
@@ -153,6 +171,20 @@ public interface BufferedSource extends Source {
    * machine-generated data where a missing line break implies truncated input.
    */
   String readUtf8LineStrict() throws IOException;
+
+  /**
+   * Removes and returns a single UTF-8 code point, reading between 1 and 4 bytes as necessary.
+   *
+   * <p>If this source is exhausted before a complete code point can be read, this throws an {@link
+   * java.io.EOFException} and consumes no input.
+   *
+   * <p>If this source doesn't start with a properly-encoded UTF-8 code point, this method will
+   * remove 1 or more non-UTF-8 bytes and return the replacement character ({@code U+FFFD}). This
+   * covers encoding problems (the input is not properly-encoded UTF-8), characters out of range
+   * (beyond the 0x10ffff limit of Unicode), code points for UTF-16 surrogates (U+d800..U+dfff) and
+   * overlong encodings (such as {@code 0xc080} for the NUL character in modified UTF-8).
+   */
+  int readUtf8CodePoint() throws IOException;
 
   /**
    * Removes all bytes from this, decodes them as {@code charset}, and returns

@@ -109,7 +109,7 @@ final class RealBufferedSource implements BufferedSource {
       // The underlying source is exhausted. Copy the bytes we got before rethrowing.
       int offset = 0;
       while (buffer.size > 0) {
-        int read = buffer.read(sink, offset, (int) buffer.size - offset);
+        int read = buffer.read(sink, offset, (int) buffer.size);
         if (read == -1) throw new AssertionError();
         offset += read;
       }
@@ -194,8 +194,28 @@ final class RealBufferedSource implements BufferedSource {
 
   @Override public String readUtf8LineStrict() throws IOException {
     long newline = indexOf((byte) '\n');
-    if (newline == -1L) throw new EOFException();
+    if (newline == -1L) {
+      Buffer data = new Buffer();
+      buffer.copyTo(data, 0, Math.min(32, buffer.size()));
+      throw new EOFException("\\n not found: size=" + buffer.size()
+          + " content=" + data.readByteString().hex() + "...");
+    }
     return buffer.readUtf8Line(newline);
+  }
+
+  @Override public int readUtf8CodePoint() throws IOException {
+    require(1);
+
+    byte b0 = buffer.getByte(0);
+    if ((b0 & 0xe0) == 0xc0) {
+      require(2);
+    } else if ((b0 & 0xf0) == 0xe0) {
+      require(3);
+    } else if ((b0 & 0xf8) == 0xf0) {
+      require(4);
+    }
+
+    return buffer.readUtf8CodePoint();
   }
 
   @Override public short readShort() throws IOException {
@@ -226,6 +246,42 @@ final class RealBufferedSource implements BufferedSource {
   @Override public long readLongLe() throws IOException {
     require(8);
     return buffer.readLongLe();
+  }
+
+  @Override public long readDecimalLong() throws IOException {
+    require(1);
+
+    for (int pos = 0; request(pos + 1); pos++) {
+      byte b = buffer.getByte(pos);
+      if ((b < '0' || b > '9') && (pos != 0 || b != '-')) {
+        // Non-digit, or non-leading negative sign.
+        if (pos == 0) {
+          throw new NumberFormatException(String.format(
+              "Expected leading [0-9] or '-' character but was %#x", b));
+        }
+        break;
+      }
+    }
+
+    return buffer.readDecimalLong();
+  }
+
+  @Override public long readHexadecimalUnsignedLong() throws IOException {
+    require(1);
+
+    for (int pos = 0; request(pos + 1); pos++) {
+      byte b = buffer.getByte(pos);
+      if ((b < '0' || b > '9') && (b < 'a' || b > 'f') && (b < 'A' || b > 'F')) {
+        // Non-digit, or non-leading negative sign.
+        if (pos == 0) {
+          throw new NumberFormatException(String.format(
+              "Expected leading [0-9a-fA-F] character but was %#x", b));
+        }
+        break;
+      }
+    }
+
+    return buffer.readHexadecimalUnsignedLong();
   }
 
   @Override public void skip(long byteCount) throws IOException {

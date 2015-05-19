@@ -30,198 +30,181 @@ import static okio.Util.checkOffsetAndCount;
 
 /** Essential APIs for working with Okio. */
 public final class Okio {
-	private static final Logger logger = Logger.getLogger(Okio.class.getName());
 
-	private Okio() {
-	}
+  private static final Logger logger = Logger.getLogger(Okio.class.getName());
 
-	/**
-	 * Returns a new source that buffers reads from {@code source}. The returned source will perform bulk reads into its in-memory buffer.
-	 * Use this wherever you read a source to get an ergonomic and efficient access to data.
-	 */
-	public static BufferedSource buffer(Source source) {
-		if (source == null)
-			throw new IllegalArgumentException("source == null");
-		return new RealBufferedSource(source);
-	}
+  private Okio() {
+  }
 
-	/**
-	 * Returns a new sink that buffers writes to {@code sink}. The returned sink will batch writes to {@code sink}. Use this wherever you
-	 * write to a sink to get an ergonomic and efficient access to data.
-	 */
-	public static BufferedSink buffer(Sink sink) {
-		if (sink == null)
-			throw new IllegalArgumentException("sink == null");
-		return new RealBufferedSink(sink);
-	}
+  /**
+   * Returns a new source that buffers reads from {@code source}. The returned
+   * source will perform bulk reads into its in-memory buffer. Use this wherever
+   * you read a source to get an ergonomic and efficient access to data.
+   */
+  public static BufferedSource buffer(Source source) {
+    if (source == null) throw new IllegalArgumentException("source == null");
+    return new RealBufferedSource(source);
+  }
 
-	/** Returns a sink that writes to {@code out}. */
-	public static Sink sink(final OutputStream out) {
-		return sink(out, new Timeout());
-	}
+  /**
+   * Returns a new sink that buffers writes to {@code sink}. The returned sink
+   * will batch writes to {@code sink}. Use this wherever you write to a sink to
+   * get an ergonomic and efficient access to data.
+   */
+  public static BufferedSink buffer(Sink sink) {
+    if (sink == null) throw new IllegalArgumentException("sink == null");
+    return new RealBufferedSink(sink);
+  }
 
-	private static Sink sink(final OutputStream out, final Timeout timeout) {
-		if (out == null)
-			throw new IllegalArgumentException("out == null");
-		if (timeout == null)
-			throw new IllegalArgumentException("timeout == null");
+  /** Returns a sink that writes to {@code out}. */
+  public static Sink sink(final OutputStream out) {
+    return sink(out, new Timeout());
+  }
 
-		return new Sink() {
-			@Override
-			public void write(Buffer source, long byteCount) throws IOException {
-				checkOffsetAndCount(source.size, 0, byteCount);
-				while (byteCount > 0) {
-					timeout.throwIfReached();
-					Segment head = source.head;
-					int toCopy = (int) Math.min(byteCount, head.limit - head.pos);
-					out.write(head.data, head.pos, toCopy);
+  private static Sink sink(final OutputStream out, final Timeout timeout) {
+    if (out == null) throw new IllegalArgumentException("out == null");
+    if (timeout == null) throw new IllegalArgumentException("timeout == null");
 
-					head.pos += toCopy;
-					byteCount -= toCopy;
-					source.size -= toCopy;
+    return new Sink() {
+      @Override public void write(Buffer source, long byteCount) throws IOException {
+        checkOffsetAndCount(source.size, 0, byteCount);
+        while (byteCount > 0) {
+          timeout.throwIfReached();
+          Segment head = source.head;
+          int toCopy = (int) Math.min(byteCount, head.limit - head.pos);
+          out.write(head.data, head.pos, toCopy);
 
-					if (head.pos == head.limit) {
-						source.head = head.pop();
-						SegmentPool.INSTANCE.recycle(head);
-					}
-				}
-			}
+          head.pos += toCopy;
+          byteCount -= toCopy;
+          source.size -= toCopy;
 
-			@Override
-			public void flush() throws IOException {
-				out.flush();
-			}
+          if (head.pos == head.limit) {
+            source.head = head.pop();
+            SegmentPool.recycle(head);
+          }
+        }
+      }
 
-			@Override
-			public void close() throws IOException {
-				out.close();
-			}
+      @Override public void flush() throws IOException {
+        out.flush();
+      }
 
-			@Override
-			public Timeout timeout() {
-				return timeout;
-			}
+      @Override public void close() throws IOException {
+        out.close();
+      }
 
-			@Override
-			public String toString() {
-				return "sink(" + out + ")";
-			}
-		};
-	}
+      @Override public Timeout timeout() {
+        return timeout;
+      }
 
-	/**
-	 * Returns a sink that writes to {@code socket}. Prefer this over {@link #sink(OutputStream)} because this method honors timeouts. When
-	 * the socket write times out, the socket is asynchronously closed by a watchdog thread.
-	 */
-	public static Sink sink(final Socket socket) throws IOException {
-		if (socket == null)
-			throw new IllegalArgumentException("socket == null");
-		AsyncTimeout timeout = timeout(socket);
-		Sink sink = sink(socket.getOutputStream(), timeout);
-		return timeout.sink(sink);
-	}
+      @Override public String toString() {
+        return "sink(" + out + ")";
+      }
+    };
+  }
 
-	/** Returns a source that reads from {@code in}. */
-	public static Source source(final InputStream in) {
-		return source(in, new Timeout());
-	}
+  /**
+   * Returns a sink that writes to {@code socket}. Prefer this over {@link
+   * #sink(OutputStream)} because this method honors timeouts. When the socket
+   * write times out, the socket is asynchronously closed by a watchdog thread.
+   */
+  public static Sink sink(final Socket socket) throws IOException {
+    if (socket == null) throw new IllegalArgumentException("socket == null");
+    AsyncTimeout timeout = timeout(socket);
+    Sink sink = sink(socket.getOutputStream(), timeout);
+    return timeout.sink(sink);
+  }
 
-	private static Source source(final InputStream in, final Timeout timeout) {
-		if (in == null)
-			throw new IllegalArgumentException("in == null");
-		if (timeout == null)
-			throw new IllegalArgumentException("timeout == null");
+  /** Returns a source that reads from {@code in}. */
+  public static Source source(final InputStream in) {
+    return source(in, new Timeout());
+  }
 
-		return new Source() {
-			@Override
-			public long read(Buffer sink, long byteCount) throws IOException {
-				if (byteCount < 0)
-					throw new IllegalArgumentException("byteCount < 0: " + byteCount);
-				timeout.throwIfReached();
-				Segment tail = sink.writableSegment(1);
-				int maxToCopy = (int) Math.min(byteCount, Segment.SIZE - tail.limit);
-				int bytesRead = in.read(tail.data, tail.limit, maxToCopy);
-				if (bytesRead == -1)
-					return -1;
-				tail.limit += bytesRead;
-				sink.size += bytesRead;
-				return bytesRead;
-			}
+  private static Source source(final InputStream in, final Timeout timeout) {
+    if (in == null) throw new IllegalArgumentException("in == null");
+    if (timeout == null) throw new IllegalArgumentException("timeout == null");
 
-			@Override
-			public void close() throws IOException {
-				in.close();
-			}
+    return new Source() {
+      @Override public long read(Buffer sink, long byteCount) throws IOException {
+        if (byteCount < 0) throw new IllegalArgumentException("byteCount < 0: " + byteCount);
+        if (byteCount == 0) return 0;
+        timeout.throwIfReached();
+        Segment tail = sink.writableSegment(1);
+        int maxToCopy = (int) Math.min(byteCount, Segment.SIZE - tail.limit);
+        int bytesRead = in.read(tail.data, tail.limit, maxToCopy);
+        if (bytesRead == -1) return -1;
+        tail.limit += bytesRead;
+        sink.size += bytesRead;
+        return bytesRead;
+      }
 
-			@Override
-			public Timeout timeout() {
-				return timeout;
-			}
+      @Override public void close() throws IOException {
+        in.close();
+      }
 
-			@Override
-			public String toString() {
-				return "source(" + in + ")";
-			}
-		};
-	}
+      @Override public Timeout timeout() {
+        return timeout;
+      }
 
-	/** Returns a source that reads from {@code file}. */
-	public static Source source(File file) throws FileNotFoundException {
-		if (file == null)
-			throw new IllegalArgumentException("file == null");
-		return source(new FileInputStream(file));
-	}
+      @Override public String toString() {
+        return "source(" + in + ")";
+      }
+    };
+  }
 
-//	/** Returns a source that reads from {@code path}. */
-//	public static Source source(Path path, OpenOption... options) throws IOException {
-//		if (path == null)
-//			throw new IllegalArgumentException("path == null");
-//		return source(Files.newInputStream(path, options));
-//	}
+  /** Returns a source that reads from {@code file}. */
+  public static Source source(File file) throws FileNotFoundException {
+    if (file == null) throw new IllegalArgumentException("file == null");
+    return source(new FileInputStream(file));
+  }
 
-	/** Returns a sink that writes to {@code file}. */
-	public static Sink sink(File file) throws FileNotFoundException {
-		if (file == null)
-			throw new IllegalArgumentException("file == null");
-		return sink(new FileOutputStream(file));
-	}
+//  /** Returns a source that reads from {@code path}. */
+//  @IgnoreJRERequirement // Should only be invoked on Java 7+.
+//  public static Source source(Path path, OpenOption... options) throws IOException {
+//    if (path == null) throw new IllegalArgumentException("path == null");
+//    return source(MediaStore.Files.newInputStream(path, options));
+//  }
 
-	/** Returns a sink that appends to {@code file}. */
-	public static Sink appendingSink(File file) throws FileNotFoundException {
-		if (file == null)
-			throw new IllegalArgumentException("file == null");
-		return sink(new FileOutputStream(file, true));
-	}
+  /** Returns a sink that writes to {@code file}. */
+  public static Sink sink(File file) throws FileNotFoundException {
+    if (file == null) throw new IllegalArgumentException("file == null");
+    return sink(new FileOutputStream(file));
+  }
 
-//	/** Returns a sink that writes to {@code path}. */
-//	public static Sink sink(Path path, OpenOption... options) throws IOException {
-//		if (path == null)
-//			throw new IllegalArgumentException("path == null");
-//		return sink(Files.newOutputStream(path, options));
-//	}
+  /** Returns a sink that appends to {@code file}. */
+  public static Sink appendingSink(File file) throws FileNotFoundException {
+    if (file == null) throw new IllegalArgumentException("file == null");
+    return sink(new FileOutputStream(file, true));
+  }
 
-	/**
-	 * Returns a source that reads from {@code socket}. Prefer this over {@link #source(InputStream)} because this method honors timeouts.
-	 * When the socket read times out, the socket is asynchronously closed by a watchdog thread.
-	 */
-	public static Source source(final Socket socket) throws IOException {
-		if (socket == null)
-			throw new IllegalArgumentException("socket == null");
-		AsyncTimeout timeout = timeout(socket);
-		Source source = source(socket.getInputStream(), timeout);
-		return timeout.source(source);
-	}
+//  /** Returns a sink that writes to {@code path}. */
+//  @IgnoreJRERequirement // Should only be invoked on Java 7+.
+//  public static Sink sink(Path path, OpenOption... options) throws IOException {
+//    if (path == null) throw new IllegalArgumentException("path == null");
+//    return sink(Files.newOutputStream(path, options));
+//  }
 
-	private static AsyncTimeout timeout(final Socket socket) {
-		return new AsyncTimeout() {
-			@Override
-			protected void timedOut() {
-				try {
-					socket.close();
-				} catch (Exception e) {
-					logger.log(Level.WARNING, "Failed to close timed out socket " + socket, e);
-				}
-			}
-		};
-	}
+  /**
+   * Returns a source that reads from {@code socket}. Prefer this over {@link
+   * #source(InputStream)} because this method honors timeouts. When the socket
+   * read times out, the socket is asynchronously closed by a watchdog thread.
+   */
+  public static Source source(final Socket socket) throws IOException {
+    if (socket == null) throw new IllegalArgumentException("socket == null");
+    AsyncTimeout timeout = timeout(socket);
+    Source source = source(socket.getInputStream(), timeout);
+    return timeout.source(source);
+  }
+
+  private static AsyncTimeout timeout(final Socket socket) {
+    return new AsyncTimeout() {
+      @Override protected void timedOut() {
+        try {
+          socket.close();
+        } catch (Exception e) {
+          logger.log(Level.WARNING, "Failed to close timed out socket " + socket, e);
+        }
+      }
+    };
+  }
 }
